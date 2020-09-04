@@ -1,3 +1,8 @@
+// @ts-check
+
+import * as Base from './base.js'
+const { Codec } = Base
+
 function decode (input, alphabet) {
   input = input.replace(new RegExp('=', 'g'), '')
   const length = input.length
@@ -57,25 +62,33 @@ function encode (buffer, alphabet) {
   return output
 }
 
-const create = alphabet => {
-  return {
-    encode: input => encode(input, alphabet),
-    decode (input) {
-      for (const char of input) {
-        if (alphabet.indexOf(char) < 0) {
-          throw new Error('invalid base32 character')
-        }
-      }
+export const base32 = Codec.implementWithAlphabet(Base.base32, {
+  alphabet: 'abcdefghijklmnopqrstuvwxyz234567',
+  encode,
+  decode
+})
 
-      return decode(input, alphabet)
-    }
-  }
-}
+export const base32pad = Codec.implementWithAlphabet(Base.base32pad, {
+  alphabet: 'abcdefghijklmnopqrstuvwxyz234567=',
+  encode,
+  decode
+})
 
-export default [
-  { prefix: 'b', name: 'base32', ...create('abcdefghijklmnopqrstuvwxyz234567') },
-  { prefix: 'c', name: 'base32pad', ...create('abcdefghijklmnopqrstuvwxyz234567=') },
-  { prefix: 'v', name: 'base32hex', ...create('0123456789abcdefghijklmnopqrstuv') },
-  { prefix: 't', name: 'base32hexpad', ...create('0123456789abcdefghijklmnopqrstuv=') },
-  { prefix: 'h', name: 'base32z', ...create('ybndrfg8ejkmcpqxot1uwisza345h769') }
-]
+export const base32hex = Codec.implementWithAlphabet(Base.base32hex, {
+
+  alphabet: '0123456789abcdefghijklmnopqrstuv',
+  encode,
+  decode
+})
+
+export const base32hexpad = Codec.implementWithAlphabet(Base.base32hexpad, {
+  alphabet: '0123456789abcdefghijklmnopqrstuv=',
+  encode,
+  decode
+})
+
+export const base32z = Codec.implementWithAlphabet(Base.base32z, {
+  alphabet: 'ybndrfg8ejkmcpqxot1uwisza345h769',
+  encode,
+  decode
+})

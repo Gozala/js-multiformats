@@ -1,16 +1,35 @@
+// @ts-check
+
 import baseX from 'base-x'
 import { coerce } from '../bytes.js'
 import { Buffer } from 'buffer'
+import { Codec, base58btc as btc, base58flickr as flickr } from './base.js'
 
-const wrap = obj => ({
-  encode: b => obj.encode(Buffer.from(b)),
-  decode: s => coerce(obj.decode(s))
-})
+/**
+ * @param {ArrayBufferView} bytes
+ * @returns {Buffer}
+ */
+const asBufferView = (bytes) => {
+  if (bytes instanceof Buffer) {
+    return bytes
+  } else {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  }
+}
 
-const btc = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-const flickr = '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'
+/**
+ * @template {string} Base
+ * @template {string} Prefix
+ * @param {Codec<Base, Prefix>} codec
+ * @param {string} alphabet
+ */
+const implement = (codec, alphabet) => {
+  const base = baseX(alphabet)
+  return Codec.implement(codec, {
+    encode: bytes => base.encode(asBufferView(bytes)),
+    decode: text => coerce(base.decode(text))
+  })
+}
 
-export default [
-  { name: 'base58btc', prefix: 'z', ...wrap(baseX(btc)) },
-  { name: 'base58flickr', prefix: 'Z', ...wrap(baseX(flickr)) }
-]
+export const base58btc = implement(btc, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz')
+export const base58flickr = implement(flickr, '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ')
