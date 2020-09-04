@@ -31,6 +31,9 @@ export class CID {
     this.byteOffset = bytes.byteOffset
     this.byteLength = bytes.byteLength
 
+    // Circular reference
+    /** @private */
+    this.asCID = this
     /**
      * @type {Map<string, string>}
      * @private
@@ -47,7 +50,8 @@ export class CID {
       multihash: readonly,
       bytes: readonly,
 
-      _baseCache: hidden
+      _baseCache: hidden,
+      asCID: hidden
     })
   }
 
