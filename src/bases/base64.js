@@ -1,6 +1,6 @@
 // @ts-check
 
-import { Codec, base64, base64pad, base64url, base64urlpad } from './base.js'
+import { withSettings } from './base.js'
 
 /**
  * The alphabet is only used to know:
@@ -62,7 +62,17 @@ export default b64 => {
     return b64.decode(input)
   }
 
-  const codec = alphabet => ({
+  /**
+   * @template {string} Base
+   * @template {string} Prefix
+   * @param {Object} options
+   * @param {Base} options.name
+   * @param {Prefix} options.prefix
+   * @param {string} options.alphabet
+   */
+  const codec = ({ name, prefix, alphabet }) => withSettings({
+    name,
+    prefix,
     settings: alphabetSettings(alphabet),
     decode,
     encode
@@ -70,10 +80,26 @@ export default b64 => {
 
   return {
     b64,
-    base64: Codec.implementWithSettings(base64, codec('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/')),
-    base64pad: Codec.implementWithSettings(base64pad, codec('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')),
-    base64url: Codec.implementWithSettings(base64url, codec('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_')),
-    base64urlpad: Codec.implementWithSettings(base64urlpad, codec('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_='))
+    __browser: b64.__browser,
+    base64: codec({
+      name: 'base64',
+      prefix: 'm',
+      alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    }),
+    base64pad: codec({
+      name: 'base64pad',
+      prefix: 'M',
+      alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+    }),
+    base64url: codec({
+      name: 'base64url',
+      prefix: 'u',
+      alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    }),
+    base64urlpad: codec({
+      name: 'base64urlpad',
+      prefix: 'U',
+      alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_='
+    })
   }
 }
-export { base64, base64pad, base64url, base64urlpad }

@@ -1,9 +1,7 @@
 // @ts-check
 
-import varint from './varint.js'
-import { base58btc, base32 } from './bases/base.js'
-import { Digest, ImplicitSha256Digest } from './hashes/hasher.js'
-import { multibaseDecoder as defaultBaseDecoder } from './multibase.js'
+import * as varint from './varint.js'
+import * as Digest from './hashes/digest.js'
 
 /**
  * @typedef {import('./hashes/interface').MultihashDigest} MultihashDigest
@@ -11,21 +9,35 @@ import { multibaseDecoder as defaultBaseDecoder } from './multibase.js'
  * @typedef {import('./bases/interface').BaseDecoder} BaseDecoder
  */
 
+/**
+ * @template Prefix
+ * @typedef {import('./bases/interface').MultibaseEncoder<Prefix>} MultibaseEncoder
+ */
+
+/**
+ * @typedef {import('./cid/interface').Config} Config
+ */
+
+/**
+ * @implements {Config}
+ */
 export class CID {
   /**
-   * @protected
-   * @param {number} version
+   * @param {0|1} version
    * @param {number} code
    * @param {MultihashDigest} multihash
    * @param {Uint8Array} bytes
-   * @param {BaseEncoder} base
+   * @param {Config} config
+   *
    */
-  constructor (version, code, multihash, bytes, base) {
+  constructor (version, code, multihash, bytes, { base, base58btc }) {
     this.code = code
     this.version = version
     this.multihash = multihash
     this.bytes = bytes
+
     this.base = base
+    this.base58btc = base58btc
 
     // ArrayBufferView
     this.byteOffset = bytes.byteOffset
@@ -56,172 +68,8 @@ export class CID {
   }
 
   /**
-   *
-   * @param {number} version
-   * @param {number} code
-   * @param {MultihashDigest} digest
-   * @param {BaseEncoder} base
+   * @returns {CID}
    */
-  static create (version, code, digest, base) {
-    switch (version) {
-      case 0: {
-        if (code !== DAG_PB_CODE) {
-          throw new Error(`Version 0 CID must use dag-pb (code: ${DAG_PB_CODE}) block encoding`)
-        } else if (base.name !== BASE_58_BTC) {
-          throw new Error(`Version 0 CID must use base58btc (code: ${BASE_58_BTC}) base encoding`)
-        } else {
-          return new CID(version, code, digest, digest.bytes, base)
-        }
-      }
-      case 1: {
-        const bytes = encodeCID(version, code, digest.bytes)
-        return new CID(version, code, digest, bytes, base)
-      }
-      default: {
-        throw new Error('Invalid version')
-      }
-    }
-  }
-
-  /**
-   * @param {MultihashDigest} digest
-   */
-  static createV0 (digest) {
-    const version = 0
-    const code = DAG_PB_CODE
-    const bytes = encodeCID(version, code, digest.bytes)
-    return new CID(version, code, digest, bytes, base58btc)
-  }
-
-  /**
-   * @template {number} Code
-   * @param {Code} code
-   * @param {MultihashDigest} digest
-   * @param {BaseEncoder} base
-   */
-  static createV1 (code, digest, base = base32) {
-    const version = 1
-    const bytes = encodeCID(version, code, digest.bytes)
-    return new CID(version, code, digest, bytes, base32)
-  }
-
-  /**
-   * Creates new CID from the given value that is either CID, string or an
-   * Uint8Array.
-   * @param {CID|string|Uint8Array} value
-   */
-  static from (value) {
-    if (typeof value === 'string') {
-      return this.parse(value)
-    } else if (value instanceof Uint8Array) {
-      return this.decode(value)
-    } else {
-      const cid = CID.asCID(value)
-      if (cid) {
-        // If we got the same CID back we create a copy.
-        if (cid === value) {
-          return new CID(cid.version, cid.code, cid.multihash, cid.bytes, cid.base)
-        } else {
-          return cid
-        }
-      } else {
-        throw new TypeError(`Can not create CID from given value ${value}`)
-      }
-    }
-  }
-
-  // This is replacing `CID.from('QmHash')` which requires multibase registry
-  // that will have to contain base (decoder) that cid was encoded with (which
-  // it could be missing). All this introduces a lot of incidental complexity
-  // that can be removed by separating concerns.
-  /**
-   * Takes cid in a string representation and an optional `base` decoder for
-   * it's base encoding (could be sole decoder like `base32` or composite like
-   * `multibase([base32, base58btc])`) and returns a CID instance for it.
-   *
-   * encoding (it could be a sole decoder like like `base32` or composite
-   * multi decoder like `multibase([base32, base56btc, ....])`).
-   *
-   * Throws if base  encoding is not supported by supplied `base` decoder.
-   * @param {string} cid
-   * @param {BaseDecoder} [base]
-   */
-  static parse (cid, base = defaultBaseDecoder) {
-    const instance = this.decode(base.decode(cid))
-    // Cache string representation to avoid computing it on `this.toString()`
-    instance._baseCache.set(instance.base.name, cid)
-    return instance
-  }
-
-  /**
-   * Takes cid in a binary representation and a `base` encoder that will be used
-   * for default cid serialization.
-   *
-   * Throws if non `base56btc` encoder is supplied with CID V0.
-   * @param {Uint8Array} cid
-   * @param {BaseEncoder} [base]
-   */
-  static decode (cid, base) {
-    const [version, offset] = varint.decode(cid)
-    switch (version) {
-      // CIDv0
-      case 18: {
-        const digest = ImplicitSha256Digest.decode(cid)
-        return CID.create(0, DAG_PB_CODE, digest, base || base58btc)
-      }
-      // CIDv1
-      case 1: {
-        const [code, length] = varint.decode(cid.subarray(offset))
-        const digest = Digest.decode(cid.subarray(offset + length))
-        return CID.createV1(code, digest, base)
-      }
-      default: {
-        throw new RangeError(`Invalid CID version ${version}`)
-      }
-    }
-  }
-
-  /**
-     * Takes any input `value` and returns a `CID` instance if it was
-     * a `CID` otherwise returns `null`. If `value` is instanceof `CID`
-     * it will return value back. If `value` is not instance of this CID
-     * class, but is compatible CID it will return new instance of this
-     * `CID` class. Otherwise returs null.
-     *
-     * This allows two different incompatible versions of CID library to
-     * co-exist and interop as long as binary interface is compatible.
-     * @param {any} value
-     * @returns {CID|null}
-     */
-  static asCID (value) {
-    // If value is instance of CID then we're all set.
-    if (value instanceof CID) {
-      return value
-      // If value isn't instance of this CID class but `this.asCID === this` is
-      // true it is CID instance coming from a different implemnetation (diff
-      // version or duplicate). In that case we rebase it to this `CID`
-      // implemnetation so caller is guaranteed to get instance with expected
-      // API.
-    } else if (value != null && value.asCID === value) {
-      const { version, code, multihash, bytes, base } = value
-      return new CID(version, code, multihash, bytes, base)
-      // If value is a CID from older implementation that used to be tagged via
-      // symbol we still rebase it to the this `CID` implementation by
-      // delegating that to a constructor.
-    } else if (value != null && value[cidSymbol] === true) {
-      const { version, multihash, code, base } = value
-      const digest = multihash instanceof Uint8Array
-        ? version === 0 ? ImplicitSha256Digest.decode(multihash) : Digest.decode(multihash)
-        : multihash
-      const defaultBase = base || (version === 0 ? base58btc : base32)
-      return new CID(version, code, digest, digest.bytes, defaultBase)
-      // Otherwise value is not a CID (or an incompatible version of it) in
-      // which case we return `null`.
-    } else {
-      return null
-    }
-  }
-
   toV0 () {
     switch (this.version) {
       case 0: {
@@ -239,17 +87,20 @@ export class CID {
           throw new Error('Cannot convert non sha2-256 multihash CID to CIDv0')
         }
 
-        return CID.createV0(ImplicitSha256Digest.decode(digest))
+        return createV0(Digest.decodeImplicitSha256(digest), this)
       }
     }
   }
 
+  /**
+   * @returns {CID}
+   */
   toV1 () {
     switch (this.version) {
       case 0: {
         const { code, digest } = this.multihash
         const multihash = Digest.create(code, digest)
-        return CID.createV1(this.code, multihash, this.base)
+        return createV1(this.code, multihash, this)
       }
       case 1: {
         return this
@@ -271,22 +122,15 @@ export class CID {
   }
 
   /**
-   * @param {BaseEncoder} [base]
+   * @param {MultibaseEncoder<any>} [base]
    */
   toString (base) {
-    const { version, bytes, _baseCache } = this
+    const { bytes, version, _baseCache } = this
     switch (version) {
-      case 0: {
-        const encoder = base || base58btc
-        if (encoder.name !== BASE_58_BTC) {
-          throw new Error(`Cannot string encode V0 in ${base.name} encoding`)
-        }
-
-        return serializeAndCache(_baseCache, bytes, encoder)
-      }
-      default: {
-        return serializeAndCache(_baseCache, bytes, base || base32)
-      }
+      case 0:
+        return toStringV0(bytes, _baseCache, base || this.base58btc.encoder)
+      default:
+        return toStringV1(bytes, _baseCache, base || this.base.encoder)
     }
   }
 
@@ -336,18 +180,245 @@ export class CID {
   }
 }
 
-const serializeAndCache = (cache, bytes, base) => {
-  const text = cache.get(base)
-  if (text == null) {
-    const text = base.encode(bytes)
-    cache.set(base, text)
-    return text
-  } else {
-    return text
+class CIDAPI {
+  /**
+   * Returns API for working with CIDs.
+   * @param {Config} config
+   */
+  constructor (config) {
+    this.config = config
+    this.CID = CID
+  }
+
+  create (version, code, digest) {
+    return create(version, code, digest, this.config)
+  }
+
+  parse (cid) {
+    return parse(cid, this.config)
+  }
+
+  decode (cid) {
+    return decode(cid, this.config)
+  }
+
+  asCID (input) {
+    return asCID(input, this.config)
+  }
+
+  /**
+   * Creates a new CID from either string, binary or an object representation.
+   * Throws an error if provided `value` is not a valid CID.
+   *
+   * @param {CID|string|Uint8Array} value
+   * @returns {CID}
+   */
+  from (value) {
+    if (typeof value === 'string') {
+      return parse(value, this.config)
+    } else if (value instanceof Uint8Array) {
+      return decode(value, this.config)
+    } else {
+      const cid = asCID(value, this.config)
+      if (cid) {
+        // If we got the same CID back we create a copy.
+        if (cid === value) {
+          return new CID(cid.version, cid.code, cid.multihash, cid.bytes, this.config)
+        } else {
+          return cid
+        }
+      } else {
+        throw new TypeError(`Can not create CID from given value ${value}`)
+      }
+    }
   }
 }
 
+/**
+ *
+ * @param {number} version - Version of the CID
+ * @param {number} code - Code of the codec content is encoded in.
+ * @param {MultihashDigest} digest - (Multi)hash of the of the content.
+ * @param {Config} config - Base encoding that will be used for toString
+ * serialization. If omitted configured default will be used.
+ * @returns {CID}
+ */
+export const create = (version, code, digest, config) => {
+  switch (version) {
+    case 0: {
+      if (code !== DAG_PB_CODE) {
+        throw new Error(`Version 0 CID must use dag-pb (code: ${DAG_PB_CODE}) block encoding`)
+      } else {
+        return new CID(version, code, digest, digest.bytes, config)
+      }
+    }
+    case 1: {
+      const bytes = encodeCID(version, code, digest.bytes)
+      return new CID(version, code, digest, bytes, config)
+    }
+    default: {
+      throw new Error('Invalid version')
+    }
+  }
+}
+
+/**
+   * Simplified version of `create` for CIDv0.
+   * @param {MultihashDigest} digest - Multihash.
+   * @param {Config} config
+   */
+export const createV0 = (digest, config) => create(0, DAG_PB_CODE, digest, config)
+
+/**
+ * Simplified version of `create` for CIDv1.
+ * @template {number} Code
+ * @param {Code} code - Content encoding format code.
+ * @param {MultihashDigest} digest - Miltihash of the content.
+ * @param {Config} config - Base encoding used of the serialziation. If
+ * omitted configured default is used.
+ * @returns {CID}
+ */
+export const createV1 = (code, digest, config) => create(1, code, digest, config)
+
+/**
+ * Takes cid in a string representation and creates an instance. If `base`
+ * decoder is not provided will use a default from the configuration. It will
+ * throw an error if encoding of the CID is not compatible with supplied (or
+ * a default decoder).
+ *
+ * @param {string} source
+ * @param {Config} config
+ */
+export const parse = (source, config) => {
+  const { base, base58btc } = config
+  const [name, bytes] = source[0] === 'Q'
+    ? [BASE_58_BTC, base58btc.decoder.decode(`${BASE_58_BTC_PREFIX}{source}`)]
+    : [base.encoder.name, base.decoder.decode(source)]
+
+  const cid = decode(bytes, config)
+  // Cache string representation to avoid computing it on `this.toString()`
+  // @ts-ignore - Can't access private
+  cid._baseCache.set(name, source)
+
+  return cid
+}
+
+/**
+   * Takes cid in a binary representation and a `base` encoder that will be used
+   * for default cid serialization.
+   *
+   * Throws if supplied base encoder is incompatible (CIDv0 is only compatible
+   * with `base58btc` encoder).
+   * @param {Uint8Array} cid
+   * @param {Config} config
+   */
+export const decode = (cid, config) => {
+  const [version, offset] = varint.decode(cid)
+  switch (version) {
+    // CIDv0
+    case 18: {
+      const multihash = Digest.decodeImplicitSha256(cid)
+      return createV0(multihash, config)
+    }
+    // CIDv1
+    case 1: {
+      const [code, length] = varint.decode(cid.subarray(offset))
+      const digest = Digest.decode(cid.subarray(offset + length))
+      return createV1(code, digest, config)
+    }
+    default: {
+      throw new RangeError(`Invalid CID version ${version}`)
+    }
+  }
+}
+
+/**
+     * Takes any input `value` and returns a `CID` instance if it was
+     * a `CID` otherwise returns `null`. If `value` is instanceof `CID`
+     * it will return value back. If `value` is not instance of this CID
+     * class, but is compatible CID it will return new instance of this
+     * `CID` class. Otherwise returs null.
+     *
+     * This allows two different incompatible versions of CID library to
+     * co-exist and interop as long as binary interface is compatible.
+     * @param {any} value
+     * @param {Config} config
+     * @returns {CID|null}
+     */
+export const asCID = (value, config) => {
+  if (value instanceof CID) {
+    // If value is instance of CID then we're all set.
+    return value
+  } else if (value != null && value.asCID === value) {
+    // If value isn't instance of this CID class but `this.asCID === this` is
+    // true it is CID instance coming from a different implemnetation (diff
+    // version or duplicate). In that case we rebase it to this `CID`
+    // implemnetation so caller is guaranteed to get instance with expected
+    // API.
+    const { version, code, multihash, bytes, config } = value
+    return new CID(version, code, multihash, bytes, config)
+  } else if (value != null && value[cidSymbol] === true) {
+    // If value is a CID from older implementation that used to be tagged via
+    // symbol we still rebase it to the this `CID` implementation by
+    // delegating that to a constructor.
+    const { version, multihash, code } = value
+    const digest = version === 0
+      ? Digest.decodeImplicitSha256(multihash)
+      : Digest.decode(multihash)
+    return create(version, code, digest, config)
+  } else {
+    // Otherwise value is not a CID (or an incompatible version of it) in
+    // which case we return `null`.
+    return null
+  }
+}
+/**
+ *
+ * @param {Uint8Array} bytes
+ * @param {Map<string, string>} cache
+ * @param {MultibaseEncoder<'z'>} base
+ */
+const toStringV0 = (bytes, cache, base) => {
+  const cid = cache.get(BASE_58_BTC)
+  if (cid == null) {
+    const multibase = base.encode(bytes)
+    if (multibase[0] !== BASE_58_BTC_PREFIX) {
+      throw Error('CIDv0 can only be encoded to base58btc encoding, invalid')
+    }
+    const cid = multibase.slice(1)
+    cache.set(BASE_58_BTC, cid)
+    return cid
+  } else {
+    return cid
+  }
+}
+
+/**
+ * @template Prefix
+ * @param {Uint8Array} bytes
+ * @param {Map<string, string>} cache
+ * @param {MultibaseEncoder<Prefix>} base
+ */
+const toStringV1 = (bytes, cache, base) => {
+  const cid = cache.get(base.name)
+  if (cid == null) {
+    const cid = base.encode(bytes)
+    cache.set(base.name, cid)
+    return cid
+  } else {
+    return cid
+  }
+}
+
+/**
+ * @param {Config} config
+ */
+export const configure = config => new CIDAPI(config)
+
+export default configure
+
 const BASE_58_BTC = 'base58btc'
+const BASE_58_BTC_PREFIX = 'z'
 const DAG_PB_CODE = 0x70
 const SHA_256_CODE = 0x12
 

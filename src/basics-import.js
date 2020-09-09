@@ -1,6 +1,6 @@
 
-import { CID, hashes, codecs, bases as base } from './basics.js'
+import { cid, CID, block, Block, hasher, digest, varint, bytes, hashes, codecs, bases as _bases } from './basics.js'
 import * as base64 from './bases/base64-import.js'
 
-export const bases = { ...base, ...base64 }
-export { hashes, codecs, CID }
+const bases = { ..._bases, ...base64 }
+export { cid, CID, block, Block, hasher, digest, varint, bytes, hashes, codecs, bases }

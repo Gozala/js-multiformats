@@ -1,9 +1,11 @@
 // @ts-check
 
 import { fromHex, toHex } from '../bytes.js'
-import { base16 as codec, Codec } from './base.js'
+import { withAlphabet } from './base.js'
 
-export const base16 = Codec.implementWithAlphabet(codec, {
+export const base16 = withAlphabet({
+  prefix: 'f',
+  name: 'base16',
   alphabet: '0123456789abcdef',
   encode: toHex,
   decode: fromHex

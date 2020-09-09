@@ -11,6 +11,7 @@ export interface BlockEncoder<T> {
  * IPLD decoder part of the codec.
  */
 export interface BlockDecoder<T> {
+  code: number
   decode(bytes: Uint8Array): T
 }
 

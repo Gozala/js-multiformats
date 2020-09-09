@@ -1,7 +1,6 @@
 // @ts-check
 
-import * as Base from './base.js'
-const { Codec } = Base
+import { withAlphabet } from './base.js'
 
 function decode (input, alphabet) {
   input = input.replace(new RegExp('=', 'g'), '')
@@ -62,32 +61,41 @@ function encode (buffer, alphabet) {
   return output
 }
 
-export const base32 = Codec.implementWithAlphabet(Base.base32, {
+export const base32 = withAlphabet({
+  prefix: 'b',
+  name: 'base32',
   alphabet: 'abcdefghijklmnopqrstuvwxyz234567',
   encode,
   decode
 })
 
-export const base32pad = Codec.implementWithAlphabet(Base.base32pad, {
+export const base32pad = withAlphabet({
+  prefix: 'c',
+  name: 'base32pad',
   alphabet: 'abcdefghijklmnopqrstuvwxyz234567=',
   encode,
   decode
 })
 
-export const base32hex = Codec.implementWithAlphabet(Base.base32hex, {
-
+export const base32hex = withAlphabet({
+  prefix: 'v',
+  name: 'base32hex',
   alphabet: '0123456789abcdefghijklmnopqrstuv',
   encode,
   decode
 })
 
-export const base32hexpad = Codec.implementWithAlphabet(Base.base32hexpad, {
+export const base32hexpad = withAlphabet({
+  prefix: 't',
+  name: 'base32hexpad',
   alphabet: '0123456789abcdefghijklmnopqrstuv=',
   encode,
   decode
 })
 
-export const base32z = Codec.implementWithAlphabet(Base.base32z, {
+export const base32z = withAlphabet({
+  prefix: 'h',
+  name: 'base32z',
   alphabet: 'ybndrfg8ejkmcpqxot1uwisza345h769',
   encode,
   decode

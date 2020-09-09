@@ -1,10 +1,10 @@
 // @ts-check
 
-import { Codec } from './codec.js'
+import { codec } from './codec.js'
 
-export default Codec.from({
+export default codec({
   name: 'json',
   code: 0x0200,
-  encode: obj => new TextEncoder().encode(JSON.stringify(obj)),
-  decode: buff => JSON.parse(new TextDecoder().decode(buff))
+  encode: json => new TextEncoder().encode(JSON.stringify(json)),
+  decode: bytes => JSON.parse(new TextDecoder().decode(bytes))
 })

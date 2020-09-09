@@ -1,7 +1,7 @@
 // @ts-check
 
 import { coerce } from '../bytes.js'
-import { Codec } from './codec.js'
+import { codec } from './codec.js'
 
 /**
  * @param {Uint8Array} bytes
@@ -9,7 +9,7 @@ import { Codec } from './codec.js'
  */
 const raw = (bytes) => coerce(bytes)
 
-export default Codec.from({
+export default codec({
   name: 'raw',
   code: 85,
   decode: raw,

@@ -7,221 +7,199 @@
  */
 
 /**
+ * @template T
+ * @typedef {import('./interface').Multibase<T>} Multibase
+ */
+/**
+ * @template T
+ * @typedef {import('./interface').MultibaseEncoder<T>} MultibaseEncoder
+ */
+
+/**
+ * Class represents both BaseEncoder and MultibaseEncoder meaning it
+ * can be used to encode to multibase or base encode without multibase
+ * prefix.
  * @class
- * @implements {BaseEncoder}
  * @template {string} Base
  * @template {string} Prefix
+ * @implements {MultibaseEncoder<Prefix>}
+ * @implements {BaseEncoder}
  */
-export class Encoder {
+class Encoder {
   /**
    * @param {Base} name
    * @param {Prefix} prefix
+   * @param {(bytes:Uint8Array) => string} baseEncode
    */
-  constructor (name, prefix) {
+  constructor (name, prefix, baseEncode) {
     this.name = name
     this.prefix = prefix
+    this.baseEncode = baseEncode
   }
 
   /**
-   * @param {Uint8Array} input
-   * @returns {string}
+   * @param {Uint8Array} bytes
+   * @returns {Multibase<Prefix>}
    */
-  encode (input) {
-    throw new Error(`${this.name} encoder is imported as placeholder, in order to encode implementation needs to be imported`)
+  encode (bytes) {
+    // @ts-ignore
+    return `${this.prefix}${this.rawEncode(bytes)}`
   }
 }
 
 /**
- * @class
- * @implements {BaseDecoder}
+ * @template T
+ * @typedef {import('./interface').MultibaseDecoder<T>} MultibaseDecoder
  */
-export class Decoder {
-  /**
-   * @param {string} name
-   */
-  constructor (name) {
-    this.name = name
-  }
-
-  /**
-   * @param {string} input
-   * @returns {Uint8Array}
-   */
-  decode (input) {
-    throw new Error(`${this.name} decoder is imported as placeholder, in order to decode implementation needs to be imported`)
-  }
-}
 
 /**
+ * Class represents both BaseDecoder and MultibaseDecoder so it could be used
+ * to decode multibases (with matching prefix) or just base decode strings
+ * with corresponding base encoding.
  * @class
- * @implements {BaseCodec}
  * @template {string} Base
  * @template {string} Prefix
+ * @implements {MultibaseDecoder<Prefix>}
+ * @implements {BaseDecoder}
+ */
+class Decoder {
+  /**
+   * @param {Base} name
+   * @param {Prefix} prefix
+   * @param {(text:string) => Uint8Array} baseDecode
+   */
+  constructor (name, prefix, baseDecode) {
+    this.name = name
+    this.prefix = prefix
+    this.baseDecode = baseDecode
+  }
+
+  /**
+   * @param {string} text
+   */
+  decode (text) {
+    switch (text[0]) {
+      case this.prefix: {
+        return this.baseDecode(text.slice(1))
+      }
+      default: {
+        throw Error(`${this.name} expects input starting with ${this.prefix} and can not decode "${text}"`)
+      }
+    }
+  }
+}
+
+/**
+ * @template T
+ * @typedef {import('./interface').MultibaseCodec<T>} MultibaseCodec
+ */
+
+/**
+ * @class
+ * @template {string} Base
+ * @template {string} Prefix
+ * @implements {MultibaseCodec<Prefix>}
+ * @implements {MultibaseEncoder<Prefix>}
+ * @implements {MultibaseDecoder<Prefix>}
+ * @implements {BaseCodec}
+ * @implements {BaseEncoder}
+ * @implements {BaseDecoder}
  */
 export class Codec {
   /**
-   * @private
    * @param {Base} name
    * @param {Prefix} prefix
+   * @param {(bytes:Uint8Array) => string} baseEncode
+   * @param {(text:string) => Uint8Array} baseDecode
    */
-  constructor (name, prefix) {
+  constructor (name, prefix, baseEncode, baseDecode) {
     this.name = name
     this.prefix = prefix
-    this.encoder = new Encoder(name, prefix)
-    this.decoder = new Decoder(name)
+    this.baseEncode = baseEncode
+    this.baseDecode = baseDecode
+    this.encoder = new Encoder(name, prefix, baseEncode)
+    this.decoder = new Decoder(name, prefix, baseDecode)
   }
 
   /**
    * @param {Uint8Array} input
-   * @returns {string}
    */
   encode (input) {
     return this.encoder.encode(input)
   }
 
-  /**
-   * @param {string} input
-   * @returns {Uint8Array}
-   */
   decode (input) {
     return this.decoder.decode(input)
   }
-
-  /**
-   * @template {string} Base
-   * @template {string} Prefix
-   * @param {Object} options
-   * @param {Base} options.name
-   * @param {Prefix} options.prefix
-   */
-  static placeholder ({ name, prefix }) {
-    return new Codec(name, prefix)
-  }
-
-  /**
-   * @template {string} Base
-   * @template {string} Prefix
-   * @param {Codec<Base, Prefix>} codec
-   * @param {Object} options
-   * @param {string} options.alphabet
-   * @param {(input:Uint8Array, alphabet:string) => string} options.encode
-   * @param {(input:string, alphabet:string) => Uint8Array} options.decode
-   */
-  static implementWithAlphabet (codec, { encode, decode, alphabet }) {
-    const { name } = this
-    return this.implement(codec, {
-      encode: (input) => encode(input, alphabet),
-      decode: (input) => {
-        for (const char of input) {
-          if (alphabet.indexOf(char) < 0) {
-            throw new Error(`invalid ${name} character`)
-          }
-        }
-        return decode(input, alphabet)
-      }
-    })
-  }
-
-  /**
-   * @template {string} Base
-   * @template {string} Prefix
-   * @template Settings
-   *
-   * @param {Codec<Base, Prefix>} codec
-   * @param {Object} options
-   * @param {Settings} options.settings
-   * @param {(input:Uint8Array, settings:Settings) => string} options.encode
-   * @param {(input:string, settings:Settings) => Uint8Array} options.decode
-   */
-
-  static implementWithSettings (codec, { settings, encode, decode }) {
-    return this.implement(codec, {
-      encode: (input) => encode(input, settings),
-      decode: (input) => decode(input, settings)
-    })
-  }
-
-  /**
-   * @template {string} Base
-   * @template {string} Prefix
-   * @param {Codec<Base, Prefix>} codec
-   * @param {Object} a
-   * @param {(bytes:Uint8Array) => string} a.encode
-   * @param {(input:string) => Uint8Array} a.decode
-   * @returns {Codec<Base, Prefix>}
-   */
-  static implement (codec, { encode, decode }) {
-    defineReadOnly(codec.encoder, 'encode', bytes => `${codec.prefix}${encode(bytes)}`)
-    defineReadOnly(codec.decoder, 'decode', text => decode(text.slice(1)))
-
-    return codec
-  }
 }
 
-const defineReadOnly = (target, name, value) =>
-  Object.defineProperty(target, name, {
-    value,
-    enumerable: false,
-    configurable: false,
-    writable: false
+/**
+ * @template {string} Base
+ * @template {string} Prefix
+ * @param {Object} options
+ * @param {Base} options.name
+ * @param {Prefix} options.prefix
+ * @param {string} options.alphabet
+ * @param {(input:Uint8Array, alphabet:string) => string} options.encode
+ * @param {(input:string, alphabet:string) => Uint8Array} options.decode
+ */
+export const withAlphabet = ({ name, prefix, encode, decode, alphabet }) =>
+  from({
+    name,
+    prefix,
+    encode: input => encode(input, alphabet),
+    decode: input => {
+      for (const char of input) {
+        if (alphabet.indexOf(char) < 0) {
+          throw new Error(`invalid ${name} character`)
+        }
+      }
+      return decode(input, alphabet)
+    }
   })
 
-export const base16 = Codec.placeholder({
-  prefix: 'f',
-  name: 'base16'
-})
+/**
+ * @template {string} Base
+ * @template {string} Prefix
+ * @template Settings
+ *
+ * @param {Object} options
+ * @param {Base} options.name
+ * @param {Prefix} options.prefix
+ * @param {Settings} options.settings
+ * @param {(input:Uint8Array, settings:Settings) => string} options.encode
+ * @param {(input:string, settings:Settings) => Uint8Array} options.decode
+ */
 
-export const base32 = Codec.placeholder({
-  prefix: 'b',
-  name: 'base32'
-})
+export const withSettings = ({ name, prefix, settings, encode, decode }) =>
+  from({
+    name,
+    prefix,
+    encode: (input) => encode(input, settings),
+    decode: (input) => decode(input, settings)
+  })
 
-export const base32pad = Codec.placeholder({
-  prefix: 'c',
-  name: 'base32pad'
-})
+/**
+ * @template {string} Base
+ * @template {string} Prefix
+ * @param {Object} options
+ * @param {Base} options.name
+ * @param {Prefix} options.prefix
+ * @param {(bytes:Uint8Array) => string} options.encode
+ * @param {(input:string) => Uint8Array} options.decode
+ * @returns {Codec<Base, Prefix>}
+ */
+export const from = ({ name, prefix, encode, decode }) =>
+  new Codec(name, prefix, encode, decode)
 
-export const base32hex = Codec.placeholder({
-  prefix: 'v',
-  name: 'base32hex'
-})
-
-export const base32hexpad = Codec.placeholder({
-  prefix: 't',
-  name: 'base32hexpad'
-})
-
-export const base32z = Codec.placeholder({
-  prefix: 'h',
-  name: 'base32z'
-})
-
-export const base58btc = Codec.placeholder({
-  name: 'base58btc',
-  prefix: 'z'
-})
-
-export const base58flickr = Codec.placeholder({
-  name: 'base58flickr',
-  prefix: 'Z'
-})
-
-export const base64 = Codec.placeholder({
-  name: 'base64',
-  prefix: 'm'
-})
-
-export const base64pad = Codec.placeholder({
-  name: 'base64pad',
-  prefix: 'M'
-})
-
-export const base64url = Codec.placeholder({
-  name: 'base64url',
-  prefix: 'u'
-})
-
-export const base64urlpad = Codec.placeholder({
-  name: 'base64urlpad',
-  prefix: 'U'
-})
+export const notImplemented = ({ name, prefix }) =>
+  from({
+    name,
+    prefix,
+    encode: _ => {
+      throw Error(`No ${name} encoder implementation was provided`)
+    },
+    decode: _ => {
+      throw Error(`No ${name} decoder implemnetation was provided`)
+    }
+  })
